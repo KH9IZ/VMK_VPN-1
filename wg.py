@@ -6,6 +6,11 @@ import os.path
 from random import sample
 import subprocess
 
+used_ips: set[IPv4Address] = {
+    IPv4Address('10.0.0.1'),
+    IPv4Address('10.0.0.2')
+}
+
 class WireGuardConfig:
     """Manage config files."""
 
@@ -18,7 +23,7 @@ class WireGuardConfig:
     CONFIGS_PATH: str = '/etc/wireguard/clients'
     SERVER_PUBLIC_KEY_PATH: str = '/etc/wireguard/server/server.key.pub'
 
-    def __init__(self, client_name: str, used_ips: set[IPv4Address]):
+    def __init__(self, client_name: str):
         """Select unused ip and init inner fields."""
         self.__client_name = client_name
         available_ips = set(ip_network(self.HOSTS_NET + '/' +
@@ -58,6 +63,7 @@ class WireGuardConfig:
             self.__fill_out_config(private,
                                    WireGuardConfig.__read_file(self.SERVER_PUBLIC_KEY_PATH))
             self.__add_client_key_to_server(public)
+            used_ips.add(self.address())
         except Exception as exs:
             return (False, str(exs))
         return (True, self.get())
