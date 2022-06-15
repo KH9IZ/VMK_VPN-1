@@ -55,7 +55,8 @@ def callback_query(call):
 
     if doc:
         bot.answer_callback_query(call.id, _("Your config is ready!"))
-        bot.send_document(chat_id=call.message.chat.id, document=doc)
+        with open(doc, 'r') as f:
+            bot.send_document(chat_id=call.message.chat.id, document=f)
     else:
         bot.answer_callback_query(
             call.id, _("No suitable config found. Sorry!"))
