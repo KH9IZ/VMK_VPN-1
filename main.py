@@ -66,7 +66,7 @@ def faq_menu_query(call):
     """
     Handle FAQ menu.
     """
-    config = dict()
+    config: dict = {}
     for question in QuestionAnswer.select():
         config["faq_question_" + str(question.id)] = question.question
     config["back_to_main_menu"] = _(" « Back")
@@ -85,7 +85,8 @@ def faq_question_query(call):
     message_text = mbold(query[0].question) + '\n\n' + query[0].answer
     bot.edit_message_text(message_text, call.message.chat.id,
                           call.message.message_id,
-                          reply_markup=gen_markup({"faq": _(" « Back")}, 1))
+                          reply_markup=gen_markup({"faq": _(" « Back")}, 1),
+                          parse_mode="MARKDOWN")
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_main_menu")
