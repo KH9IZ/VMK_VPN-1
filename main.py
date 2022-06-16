@@ -5,9 +5,10 @@ VPN Bot main function, that declares it's workflow, supported commands and repli
 import os
 import gettext
 import telebot
+from telebot.formatting import mbold
 
 from wg import get_peer_config
-from faq import FaqMenu
+from models import QuestionAnswer
 
 translation = gettext.translation("messages", "trans", fallback=True)
 _, ngettext = translation.gettext, translation.ngettext
@@ -21,9 +22,7 @@ except Exception as exc:
 
 bot = telebot.TeleBot(token)
 
-faq_menu = FaqMenu(bot, _("Frequently asked questions"), _(" « Back"))
-
-def gen_markup(keys: dict, row_width):
+def gen_markup(keys: dict, row_width: int):
     """
     Create inline keyboard of given shape with buttons specified like callback:name in dict
     """
@@ -49,7 +48,7 @@ def send_welcome(message):
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "config")
-def callback_query(call):
+def config_query(call):
     """
     Callback handler to send user his config or to tell him that he doesn't have one
     """
@@ -67,24 +66,38 @@ def faq_menu_query(call):
     """
     Handle FAQ menu.
     """
-    faq_menu.handle_menu_query(call)
-
-
-@bot.callback_query_handler(func=lambda call: call.data == faq_menu.BACK_BUTTON_DATA)
-def faq_back_query(call):
-    """
-    Handle FAQ back button.
-    """
-    faq_menu.handle_back_query(call)
+    config = dict()
+    for question in QuestionAnswer.select():
+        config["faq_question_" + str(question.id)] = question.question
+    config["back_to_main_menu"] = _(" « Back")
+    bot.edit_message_text(_("Frequently asked questions"), call.message.chat.id,
+                              call.message.message_id, reply_markup=gen_markup(config, 1))
 
 
 @bot.callback_query_handler(func=lambda call:
-                            call.data.startswith(faq_menu.QUESTION_PREFIX))
+                            call.data.startswith("faq_question_"))
 def faq_question_query(call):
     """
     Handle FAQ question button.
     """
-    faq_menu.handle_question(call)
+    question_id = int(call.data.removeprefix("faq_question_"))
+    query = QuestionAnswer.select().where(QuestionAnswer.id == question_id).limit(1)
+    message_text = mbold(query[0].question) + '\n\n' + query[0].answer
+    bot.edit_message_text(message_text, call.message.chat.id,
+                          call.message.message_id,
+                          reply_markup=gen_markup({"faq": _(" « Back")}, 1))
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_main_menu")
+def faq_back_to_main_menu_query(call):
+    """
+    Handle FAQ back button.
+    """
+    markup = gen_markup({"config":  _("Get your config!"),
+                         "faq": _("FAQ")}, 1)
+    bot.edit_message_text(_("Welcome to the CMC MSU bot for fast and secure VPN connection!"),
+                          call.message.chat.id,
+                          call.message.message_id, reply_markup=markup)
 
 
 def main():
