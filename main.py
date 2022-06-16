@@ -5,9 +5,10 @@ VPN Bot main function, that declares it's workflow, supported commands and repli
 import os
 import gettext
 import telebot
+from telebot.formatting import mbold
 
 from wg import get_peer_config
-
+from models import QuestionAnswer
 
 translation = gettext.translation("messages", "trans", fallback=True)
 _, ngettext = translation.gettext, translation.ngettext
@@ -21,16 +22,15 @@ except Exception as exc:
 
 bot = telebot.TeleBot(token)
 
-
-def gen_markup(keys, row_width):
+def gen_markup(keys: dict, row_width: int):
     """
     Create inline keyboard of given shape with buttons specified like callback:name in dict
     """
     markup = telebot.types.InlineKeyboardMarkup()
     markup.row_width = row_width
-    for conf in keys:
+    for conf_data, conf_text in keys.items():
         markup.add(telebot.types.InlineKeyboardButton(
-            keys[conf], callback_data=conf))
+            conf_text, callback_data=conf_data))
     return markup
 
 
@@ -39,7 +39,8 @@ def send_welcome(message):
     """
     Handler for /start command
     """
-    markup = gen_markup({"config":  _("Get your config!")}, 1)
+    markup = gen_markup({"config":  _("Get your config!"),
+                         "faq": _("FAQ")}, 1)
     bot.send_message(chat_id=message.chat.id,
                      text=_(
                          "Welcome to the CMC MSU bot for fast and secure VPN connection!"),
@@ -47,19 +48,57 @@ def send_welcome(message):
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "config")
-def callback_query(call):
+def config_query(call):
     """
     Callback handler to send user his config or to tell him that he doesn't have one
     """
-    doc = get_peer_config(call.from_user.id)
-
-    if doc:
+    if (doc := get_peer_config(call.from_user.id)):
         bot.answer_callback_query(call.id, _("Your config is ready!"))
-        with open(doc, 'r') as f:
-            bot.send_document(chat_id=call.message.chat.id, document=f)
+        with open(doc, 'r', encoding='utf-8') as config_file:
+            bot.send_document(chat_id=call.message.chat.id, document=config_file)
     else:
         bot.answer_callback_query(
             call.id, _("No suitable config found. Sorry!"))
+
+
+@bot.callback_query_handler(func=lambda call: call.data == 'faq')
+def faq_menu_query(call):
+    """
+    Handle FAQ menu.
+    """
+    config: dict = {}
+    for question in QuestionAnswer.select():
+        config["faq_question_" + str(question.id)] = question.question
+    config["back_to_main_menu"] = _(" « Back")
+    bot.edit_message_text(_("Frequently asked questions"), call.message.chat.id,
+                              call.message.message_id, reply_markup=gen_markup(config, 1))
+
+
+@bot.callback_query_handler(func=lambda call:
+                            call.data.startswith("faq_question_"))
+def faq_question_query(call):
+    """
+    Handle FAQ question button.
+    """
+    question_id = int(call.data.removeprefix("faq_question_"))
+    query = QuestionAnswer.select().where(QuestionAnswer.id == question_id).limit(1)
+    message_text = mbold(query[0].question) + '\n\n' + query[0].answer
+    bot.edit_message_text(message_text, call.message.chat.id,
+                          call.message.message_id,
+                          reply_markup=gen_markup({"faq": _(" « Back")}, 1),
+                          parse_mode="MARKDOWN")
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_main_menu")
+def faq_back_to_main_menu_query(call):
+    """
+    Handle FAQ back button.
+    """
+    markup = gen_markup({"config":  _("Get your config!"),
+                         "faq": _("FAQ")}, 1)
+    bot.edit_message_text(_("Welcome to the CMC MSU bot for fast and secure VPN connection!"),
+                          call.message.chat.id,
+                          call.message.message_id, reply_markup=markup)
 
 
 def main():
