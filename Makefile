@@ -5,3 +5,6 @@ deploy:
 lint:
 	pylint *.py --disable=unspecified-encoding,too-few-public-methods,unspecified-encoding --max-line-length=110
 	pydocstyle *.py
+
+test:
+	python -m unittest discover
